@@ -3,7 +3,7 @@ import { streamText } from "ai";
 import axios from "axios";
 import { google } from "@ai-sdk/google";
 
-const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
 export async function POST(req) {
   console.log("💬 API route hit!");
@@ -164,7 +164,7 @@ ${JSON.stringify(results, null, 2)}
 Based on this data, generate an insightful, human-friendly response that addresses all relevant parts of the user's query. And also structure the result in nice formate , provide space when required and use bullet points or numbered lists where appropriate.
     `;
 
-    console.log("🔑 ENV TEST:", process.env.GEMINI_API_KEY);
+    console.log("🔑 ENV TEST:", process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
     const finalResponse = streamText({
       model: google("gemini-1.5-pro"),

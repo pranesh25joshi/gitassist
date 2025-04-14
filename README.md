@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🧠 GitAssist ChatBox
 
-## Getting Started
+GitAssist is an interactive AI-powered chat assistant designed to answer questions about a GitHub user's activity — including their repositories, commits, pull requests, and more.
 
-First, run the development server:
+Built using:
+- React & Next.js (Client Components)
+- AI SDK (`@ai-sdk/react`)
+- Zustand for state management
+- Radix UI & Lucide for icons
+- Tailwind CSS for styling
+- `react-markdown` for rich message formatting
+
+---
+
+## 🚀 Features
+
+- 🔍 Ask GitHub-related questions using natural language
+- 💬 Real-time AI chat interface
+- 🤖 Messages styled with proper markdown support
+- 🧪 Error handling and loading indicators
+- 🔄 Auto-scrolls to the latest message
+- 🎯 Works with any valid GitHub username
+
+---
+
+## 🛠️ Setup Instructions
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/gitassist-chatbox.git
+   cd gitassist-chatbox
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Install `react-markdown`**
+   ```bash
+   npm install react-markdown
+   ```
+
+4. **Run your dev server**
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## 🧩 Folder Structure
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+/components
+  └── ChatBox.tsx        # Main chat interface
+  └── ui/                # UI components like Button, Input, Card, etc.
+
+/lib
+  └── store.ts           # Zustand store for global state
+
+/public
+  └── gitassist-logo.png # Avatar for GitAssist bot
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ✨ Screenshots
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> Add a screenshot of your chat UI in this section (e.g. `public/demo-chat.png`)
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 📦 Dependencies
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `@ai-sdk/react`
+- `zustand`
+- `react-markdown`
+- `@radix-ui/react-icons`
+- `lucide-react`
+- `tailwindcss`
+- `clsx` *(if used)*
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 📄 License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT License © 2025 [Pranesh Joshi]

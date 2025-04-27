@@ -3,14 +3,16 @@ import { streamText } from "ai";
 import axios from "axios";
 import { google } from "@ai-sdk/google";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
+const genAI = new GoogleGenerativeAI(
+  process.env.GOOGLE_GENERATIVE_AI_API_KEY
+);
 
 export async function POST(req) {
   console.log("💬 API route hit!");
 
+ 
   const body = await req.json();
   const messages = body.messages;
-
   const username = messages?.[0]?.data?.username;
   console.log("Messages:", messages);
   console.log("Username:", username);
@@ -19,12 +21,14 @@ export async function POST(req) {
     return Response.json({ error: "Username is missing" }, { status: 400 });
   }
 
+  
   const lastUserMessage =
     messages[messages.length - 1]?.text ||
     messages[messages.length - 1]?.content ||
     "";
   console.log("Last User Message:", lastUserMessage);
 
+  
   const intentPrompt = `
 User asked: "${lastUserMessage}"
 Username: ${username}
@@ -38,20 +42,20 @@ List all applicable intents from the following options:
 - starred_repos
 
 Only return intents as a comma-separated list, no explanation.
-  `;
+  `.trim();
 
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-
   const intentResult = await model.generateContent(intentPrompt);
   console.log("Intent Result:", intentResult);
+
   const rawIntents = intentResult.response.text().trim();
   const intents = rawIntents
     .split(",")
-    .map((intent) => intent.trim())
-    .filter((intent) => intent.length > 0);
-
+    .map((i) => i.trim())
+    .filter(Boolean);
   console.log("🤖 Intents:", intents);
 
+ 
   const apiMap = {
     user_bio: `https://api.github.com/users/${username}`,
     recent_repos: `https://api.github.com/users/${username}/repos?sort=updated`,
@@ -61,33 +65,33 @@ Only return intents as a comma-separated list, no explanation.
     starred_repos: `https://api.github.com/users/${username}/starred`,
   };
 
-  const results = {};
-
-  try {
-    for (const intent of intents) {
-      try {
-        const res = await axios.get(apiMap[intent]);
+  // fire all fetches in parallel
+  const fetchPromises = intents.map((intent) => {
+    return axios
+      .get(apiMap[intent])
+      .then((res) => {
         let data = res.data;
 
+        
         if (intent === "recent_repos") {
-          data = data.map((repo) => ({
-            name: repo.name,
-            description: repo.description,
-            language: repo.language,
-            stars: repo.stargazers_count,
-            forks: repo.forks_count,
-            updated_at: repo.updated_at,
-            html_url: repo.html_url,
+          data = data.map((r) => ({
+            name: r.name,
+            description: r.description,
+            language: r.language,
+            stars: r.stargazers_count,
+            forks: r.forks_count,
+            updated_at: r.updated_at,
+            html_url: r.html_url,
           }));
         } else if (intent === "recent_commits") {
-          data = data.map((event) => ({
-            type: event.type,
-            repo: event.repo.name,
-            created_at: event.created_at,
-            actor: event.actor.login,
-            commit_message: event.payload.commits?.[0]?.message || "",
-            commit_url: event.payload.commits?.[0]?.url || "",
-            action: event.payload.action || "",
+          data = data.map((e) => ({
+            type: e.type,
+            repo: e.repo.name,
+            created_at: e.created_at,
+            actor: e.actor.login,
+            commit_message: e.payload.commits?.[0]?.message || "",
+            commit_url: e.payload.commits?.[0]?.url || "",
+            action: e.payload.action || "",
           }));
         } else if (intent === "open_pull_requests") {
           data = data.items.map((pr) => ({
@@ -98,62 +102,41 @@ Only return intents as a comma-separated list, no explanation.
             repository_url: pr.repository_url,
           }));
         } else if (intent === "repo_languages") {
-          const allLangs = {};
-          data.forEach((repo) => {
-            if (repo.language) {
-              allLangs[repo.language] = (allLangs[repo.language] || 0) + 1;
-            }
+          const langs = {};
+          data.forEach((r) => {
+            if (r.language) langs[r.language] = (langs[r.language] || 0) + 1;
           });
-          data = Object.entries(allLangs).map(([language, count]) => ({
+          data = Object.entries(langs).map(([language, count]) => ({
             language,
             count,
           }));
         } else if (intent === "starred_repos") {
-          data = data.map((repo) => ({
-            name: repo.name,
-            owner: repo.owner.login,
-            description: repo.description,
-            stars: repo.stargazers_count,
-            language: repo.language,
-            html_url: repo.html_url,
-          }));
-        } else if (intent === "followers" || intent === "following") {
-          data = data.map((user) => ({
-            username: user.login,
-            avatar: user.avatar_url,
-            url: user.html_url,
-          }));
-        } else if (intent === "gists") {
-          data = data.map((gist) => ({
-            id: gist.id,
-            description: gist.description,
-            files: Object.keys(gist.files),
-            created_at: gist.created_at,
-            url: gist.html_url,
-          }));
-        } else if (intent === "received_events") {
-          data = data.map((event) => ({
-            type: event.type,
-            repo: event.repo.name,
-            actor: event.actor.login,
-            created_at: event.created_at,
-          }));
-        } else if (intent === "orgs") {
-          data = data.map((org) => ({
-            name: org.login,
-            description: org.description,
-            avatar: org.avatar_url,
-            url: org.url,
+          data = data.map((r) => ({
+            name: r.name,
+            owner: r.owner.login,
+            description: r.description,
+            stars: r.stargazers_count,
+            language: r.language,
+            html_url: r.html_url,
           }));
         }
+        
 
-        results[intent] = data;
-      } catch (err) {
+        return [intent, data];
+      })
+      .catch((err) => {
         console.error(`Error fetching data for intent: ${intent}`, err);
-        results[intent] = { error: "Failed to fetch data." };
-      }
-    }
+        return [intent, { error: "Failed to fetch data." }];
+      });
+  });
 
+  let results = {};
+  try {
+   // for parallel execution of api, earlier it was done using a for loop, which takes time for each call, but now the total time is close to the max time taken by any call
+    const entries = await Promise.all(fetchPromises);
+    results = Object.fromEntries(entries);
+
+    
     const responsePrompt = `
 The user asked: "${lastUserMessage}"
 
@@ -161,11 +144,15 @@ Below is the structured GitHub data for intents: ${intents.join(", ")}.
 
 ${JSON.stringify(results, null, 2)}
 
-Based on this data, generate an insightful, human-friendly response that addresses all relevant parts of the user's query. And also structure the result in nice formate , provide space when required and use bullet points or numbered lists where appropriate.
-    `;
+Based on this data, generate an insightful, human-friendly response that:
+- Addresses each part of the user's query
+- Uses bullet points or numbered lists where appropriate
+- Leaves whitespace for readability
+    `.trim();
 
     console.log("🔑 ENV TEST:", process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
+    
     const finalResponse = streamText({
       model: google("gemini-1.5-pro"),
       prompt: responsePrompt,
@@ -180,7 +167,6 @@ Based on this data, generate an insightful, human-friendly response that address
     return finalResponse.toDataStreamResponse();
   } catch (error) {
     console.error("🔥 Unexpected Error:", error);
-
     return new Response(
       `Sorry, I couldn't fetch GitHub data for ${username}. Please check if the username is correct and try again.`,
       { status: 500 }

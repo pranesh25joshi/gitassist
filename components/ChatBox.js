@@ -15,13 +15,75 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+// Progressive stepper component - slim design
+function LoadingStepper({ step }) {
+  const steps = [
+    { label: "Detecting intents", icon: "🔍" },
+    { label: "Fetching GitHub data", icon: "📊" },
+    { label: "Generating response", icon: "🤖" },
+  ];
+  
+  // Only show steps up to current step + 1 (progressive reveal)
+  const visibleSteps = steps.slice(0, Math.max(1, step + 1));
+  
+  return (
+    <div className="flex flex-col gap-1">
+      {visibleSteps.map((s, idx) => {
+        const isDone = step > idx;
+        const isActive = step === idx;
+        
+        return (
+          <div key={s.label} className="flex items-center transition-all duration-300 ease-in-out">
+            <div className="flex flex-col items-center mr-2">
+              <div className={`rounded-full w-4 h-4 flex items-center justify-center transition-all duration-200 ${
+                isDone 
+                  ? 'bg-green-500' 
+                  : isActive 
+                    ? 'bg-blue-500' 
+                    : 'bg-gray-300'
+              }`}>
+                {isDone ? (
+                  <CheckCircle2 className="w-3 h-3 text-white" />
+                ) : isActive ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-white" />
+                ) : (
+                  <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                )}
+              </div>
+              {/* Slim connecting line */}
+              {idx < visibleSteps.length - 1 && (
+                <div className={`w-px h-2 transition-colors duration-200 ${
+                  isDone ? 'bg-green-400' : 'bg-gray-300'
+                }`} />
+              )}
+            </div>
+            <span className={`text-xs transition-colors duration-200 ${
+              isDone 
+                ? 'text-green-600 font-medium' 
+                : isActive 
+                  ? 'text-blue-600 font-medium' 
+                  : 'text-gray-500'
+            }`}>
+              <span className="mr-1">{s.icon}</span>
+              {s.label}
+              {isDone && (
+                <span className="ml-1 text-xs text-green-500">✓</span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 import ReactMarkdown from "react-markdown";
 
 export default function ChatBox() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState(null);
   const { username, setLoading } = useChatStore();
   const messagesEndRef = useRef(null);
@@ -46,16 +108,25 @@ export default function ChatBox() {
       content: input,
     };
 
-    // Add user message immediately
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     const currentInput = input;
     setInput("");
     setIsLoading(true);
+    setCurrentStep(0); // Step 0: Detecting intents
     setError(null);
+
+    // Add loading message with stepper that will update in real-time
+    const loadingMessageId = (Date.now() + 1).toString();
+    const loadingMessage = {
+      id: loadingMessageId,
+      role: "assistant",
+      content: "",
+      isLoading: true,
+    };
+    setMessages((prev) => [...prev, loadingMessage]);
 
     try {
       // Step 1: Detect intents
-      console.log("🔍 Detecting intents...");
       const intentResponse = await fetch("/api/detect-intents", {
         method: "POST",
         headers: {
@@ -68,15 +139,13 @@ export default function ChatBox() {
       });
 
       const intentData = await intentResponse.json();
-      
       if (!intentResponse.ok) {
         throw new Error(intentData.message || "Failed to detect intents");
       }
 
-      console.log("🎯 Detected intents:", intentData.intents);
+      setCurrentStep(1); // Step 1: Fetching GitHub data
 
       // Step 2: Generate response using detected intents
-      console.log("🚀 Generating response...");
       const responseResponse = await fetch("/api/generate-response", {
         method: "POST",
         headers: {
@@ -89,34 +158,42 @@ export default function ChatBox() {
         }),
       });
 
-      const responseData = await responseResponse.json();
+      setCurrentStep(2); // Step 2: Generating response
 
+      const responseData = await responseResponse.json();
       if (!responseResponse.ok) {
         throw new Error(responseData.message || "Failed to generate response");
       }
 
-      // Add assistant message
+      // Remove loading message and add final response
+      setMessages((prev) => 
+        prev.filter(msg => msg.id !== loadingMessageId)
+      );
+
       const assistantMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant", 
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
         content: responseData.message,
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      console.log("✅ Response generated successfully");
-
+      setMessages((prev) => [...prev, assistantMessage]);
+      setCurrentStep(3); // All steps completed
     } catch (err) {
       console.error("🚨 Send Error:", err);
       setError(err.message);
+      setCurrentStep(0); // Reset step on error
       
-      // Add error message
+      // Remove loading message and add error message
+      setMessages((prev) => 
+        prev.filter(msg => msg.id !== loadingMessageId)
+      );
+      
       const errorMessage = {
-        id: (Date.now() + 1).toString(),
+        id: (Date.now() + 2).toString(),
         role: "assistant",
         content: "Sorry, something went wrong. Please try again.",
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -210,41 +287,16 @@ export default function ChatBox() {
                           {message.role === "user" ? "You" : "GitAssist"}
                         </div>
                         <div className="whitespace-pre-wrap break-words prose prose-sm max-w-none">
-                          <ReactMarkdown>{message.content}</ReactMarkdown>
+                          {message.isLoading ? (
+                            <LoadingStepper step={currentStep} />
+                          ) : (
+                            <ReactMarkdown>{message.content}</ReactMarkdown>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
                 ))}
-
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="flex items-start gap-2 max-w-[75%]">
-                      <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarImage
-                          src="/gitassist-logo.png"
-                          alt="GitAssist"
-                        />
-                      </Avatar>
-                      <div className="rounded-lg px-4 py-2 text-sm bg-muted rounded-tl-none">
-                        <div className="font-medium mb-1">GitAssist</div>
-                        <div className="flex items-center space-x-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Thinking...</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="flex justify-center">
-                    <div className="flex items-center space-x-2 px-4 py-2 text-sm bg-destructive/10 text-destructive rounded-lg">
-                      <AlertCircle className="w-4 h-4" />
-                      <span>Something went wrong. Please try again.</span>
-                    </div>
-                  </div>
-                )}
 
                 <div ref={messagesEndRef} />
               </div>

@@ -1,7 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { streamText } from "ai";
 import axios from "axios";
-import { google } from "@ai-sdk/google";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
@@ -166,24 +164,32 @@ Based on this data, generate an insightful, human-friendly response that address
 
     console.log("🔑 ENV TEST:", process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
-    const finalResponse = streamText({
-      model: google("gemini-1.5-pro"),
-      prompt: responsePrompt,
-      onError: (err) => {
-        console.error("Stream error:", err);
-      },
-      onFinish: ({ text }) => {
-        console.log("Generation finished with text length:", text.length);
-      },
-    });
+    // Generate final response using Gemini
+    const finalResult = await model.generateContent(responsePrompt);
+    const finalText = finalResult.response.text();
 
-    return finalResponse.toDataStreamResponse();
+    console.log("Generation finished with text length:", finalText.length);
+
+    return Response.json({
+      message: finalText,
+      success: true
+    });
   } catch (error) {
     console.error("🔥 Unexpected Error:", error);
 
-    return new Response(
-      `Sorry, I couldn't fetch GitHub data for ${username}. Please check if the username is correct and try again.`,
-      { status: 500 }
-    );
+    // Handle rate limiting specifically
+    if (error.message && error.message.includes("429")) {
+      return Response.json({
+        message: `I'm experiencing high demand right now. Here's what I found about ${username} from GitHub:\n\n${Object.keys(results).length > 0 ? JSON.stringify(results, null, 2) : 'Unable to fetch GitHub data at this time.'}`,
+        success: false,
+        error: "rate_limit"
+      }, { status: 429 });
+    }
+
+    return Response.json({
+      message: `Sorry, I couldn't fetch GitHub data for ${username}. Please check if the username is correct and try again.`,
+      success: false,
+      error: "general_error"
+    }, { status: 500 });
   }
 }

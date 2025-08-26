@@ -1,6 +1,5 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
 import useChatStore from "@/lib/store";
 import { useState, useEffect, useRef } from "react";
 import { GitHubLogoIcon, PaperPlaneIcon } from "@radix-ui/react-icons";
@@ -21,31 +20,13 @@ import ReactMarkdown from "react-markdown";
 
 export default function ChatBox() {
   const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const { username, setLoading } = useChatStore();
   const messagesEndRef = useRef(null);
 
-  // Use the AI SDK's useChat hook for message management
-  const {
-    messages: aiMessages,
-    append,
-    isLoading,
-    error,
-  } = useChat({
-    id: "github-gemini-chat",
-    initialMessages: [],
-    body: {
-      username, // Send username with every request
-    },
-    onFinish: () => {
-      setLoading(false);
-    },
-    onError: (err) => {
-      console.error("🚨 Chat Error:", err);
-      setLoading(false);
-    },
-  });
-
-  // Update loading state to match AI SDK's isLoading
+  // Update loading state
   useEffect(() => {
     setLoading(isLoading);
   }, [isLoading, setLoading]);
@@ -53,25 +34,91 @@ export default function ChatBox() {
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [aiMessages]);
+  }, [messages]);
 
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim() || !username) return;
 
-    setLoading(true);
+    const userMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      content: input,
+    };
+
+    // Add user message immediately
+    setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
+    setInput("");
+    setIsLoading(true);
+    setError(null);
 
     try {
-      await append({
-        role: "user",
-        content: input,
-        data: { username }, // Include username in the message data
+      // Step 1: Detect intents
+      console.log("🔍 Detecting intents...");
+      const intentResponse = await fetch("/api/detect-intents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          username: username,
+        }),
       });
 
-      setInput(""); // Clear input after sending
+      const intentData = await intentResponse.json();
+      
+      if (!intentResponse.ok) {
+        throw new Error(intentData.message || "Failed to detect intents");
+      }
+
+      console.log("🎯 Detected intents:", intentData.intents);
+
+      // Step 2: Generate response using detected intents
+      console.log("🚀 Generating response...");
+      const responseResponse = await fetch("/api/generate-response", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          username: username,
+          intents: intentData.intents,
+        }),
+      });
+
+      const responseData = await responseResponse.json();
+
+      if (!responseResponse.ok) {
+        throw new Error(responseData.message || "Failed to generate response");
+      }
+
+      // Add assistant message
+      const assistantMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant", 
+        content: responseData.message,
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      console.log("✅ Response generated successfully");
+
     } catch (err) {
       console.error("🚨 Send Error:", err);
-      setLoading(false);
+      setError(err.message);
+      
+      // Add error message
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -93,7 +140,7 @@ export default function ChatBox() {
       <div className="flex-1 min-h-0">
         <ScrollArea className="h-full">
           <div className="p-4 space-y-4">
-            {aiMessages.length === 0 ? (
+            {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground space-y-4 py-8">
                 <GitHubLogoIcon className="w-12 h-12 mb-2 opacity-50" />
                 <h3 className="text-lg font-medium">Welcome to GitAssist</h3>
@@ -104,9 +151,13 @@ export default function ChatBox() {
                 <div className="grid grid-cols-2 gap-2 mt-2 w-full max-w-md">
                   {[
                     "What projects has this user worked on?",
-                    "Show me recent commits",
-                    "What languages do they use?",
-                    "Any open pull requests?",
+                    "Show me their coding activity",
+                    "What languages do they use most?",
+                    "Who follows this developer?",
+                    "Show me their best repositories",
+                    "Any recent contributions?",
+                    "What organizations are they in?",
+                    "Show me their gists",
                   ].map((suggestion) => (
                     <Button
                       key={suggestion}
@@ -122,7 +173,7 @@ export default function ChatBox() {
               </div>
             ) : (
               <div className="space-y-4">
-                {aiMessages.map((message) => (
+                {messages.map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${

@@ -32,8 +32,8 @@ export async function POST(req) {
       }
     }
 
-    // Limit to max 5 intents to reduce model load
-    const limitedIntents = intents.slice(0, 5);
+    // Limit to max 3 intents to reduce model load
+    const limitedIntents = intents.slice(0, 3);
     console.log("🎯 Processing intents:", limitedIntents);
 
     const apiMap = {

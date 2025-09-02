@@ -3,6 +3,11 @@ import axios from "axios";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY);
 
+// Memory cache for responses and GitHub API data
+const cache = new Map();
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes cache for responses
+const GITHUB_CACHE_DURATION = 60 * 60 * 1000; // 1 hour cache for GitHub API data
+
 export async function POST(req) {
   console.log("🚀 Generate Response API route hit!");
 
@@ -17,7 +22,19 @@ export async function POST(req) {
       );
     }
 
-    console.log("🎯 Processing intents:", intents);
+    // Check response cache first
+    const responseKey = `response-${username}-${message.substring(0, 30)}`;
+    if (cache.has(responseKey)) {
+      const cachedData = cache.get(responseKey);
+      if (Date.now() - cachedData.timestamp < CACHE_DURATION) {
+        console.log("💾 Using cached response for:", username);
+        return Response.json(cachedData.data);
+      }
+    }
+
+    // Limit to max 5 intents to reduce model load
+    const limitedIntents = intents.slice(0, 5);
+    console.log("🎯 Processing intents:", limitedIntents);
 
     const apiMap = {
       user_bio: `https://api.github.com/users/${username}`,
@@ -42,7 +59,17 @@ export async function POST(req) {
 
     // Fetch GitHub data for each intent
     await Promise.all(
-      intents.map(async (intent) => {
+      limitedIntents.map(async (intent) => {
+        // Check GitHub API cache first
+        const githubCacheKey = `github-${username}-${intent}`;
+        if (cache.has(githubCacheKey)) {
+          const cachedData = cache.get(githubCacheKey);
+          if (Date.now() - cachedData.timestamp < GITHUB_CACHE_DURATION) {
+            console.log(`💾 Using cached GitHub data for: ${username} - ${intent}`);
+            results[intent] = cachedData.data;
+            return;
+          }
+        }
         try {
           const res = await axios.get(apiMap[intent] , { timeout: 5000 });
           let data = res.data;
@@ -240,6 +267,12 @@ export async function POST(req) {
             }
           }
 
+          // Cache the GitHub API result
+          cache.set(`github-${username}-${intent}`, {
+            data: data,
+            timestamp: Date.now()
+          });
+          
           results[intent] = data;
         } catch (err) {
           console.error(`Error fetching data for intent: ${intent}`, err.message);
@@ -266,11 +299,31 @@ Based on this data, generate an insightful, human-friendly response that address
 
       console.log("✅ Generation finished with text length:", finalText.length);
 
-      return Response.json({
+      const responseData = {
         message: finalText,
         success: true,
         data: results,
+      };
+      
+      // Cache the final response
+      cache.set(responseKey, {
+        data: responseData,
+        timestamp: Date.now()
       });
+      
+      // Clean up cache if it gets too large
+      if (cache.size > 100) {
+        const oldestKeys = [...cache.keys()]
+          .sort((a, b) => {
+            const aTime = cache.get(a)?.timestamp || 0;
+            const bTime = cache.get(b)?.timestamp || 0;
+            return aTime - bTime;
+          })
+          .slice(0, 20);
+        oldestKeys.forEach(key => cache.delete(key));
+      }
+      
+      return Response.json(responseData);
     } catch (aiError) {
       console.error("🤖 AI Generation Error:", aiError);
 

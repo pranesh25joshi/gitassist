@@ -61,7 +61,7 @@ Only return intents as a comma-separated list, no explanation.
     console.error("🔥 Intent Detection Error:", error);
     
     // Fallback intents if AI fails
-    const fallbackIntents = ["user_bio", "recent_repos", "repo_languages"];
+    const fallbackIntents = ["user_bio", "recent_repos", "recent_repos"];
     
     return Response.json({
       intents: fallbackIntents,
